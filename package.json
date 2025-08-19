@@ -8,7 +8,6 @@
   },
   "dependencies": {
     "firebase-admin": "^11.6.0"
-    // 如果你還有其他套件，請在這裡新增，並在上方這一行後面加上逗號 (,)
   },
   "author": "",
   "license": "ISC"
