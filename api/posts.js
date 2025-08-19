@@ -1,22 +1,29 @@
-import { initializeApp } from "firebase-admin/app";
+import { initializeApp, getApps } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { credential } from "firebase-admin";
 
 // 從環境變數中取得 Firebase 服務帳戶資訊
-// 注意：你需要從 Vercel 的專案設定中添加這個環境變數
-// 變數名稱: FIREBASE_SERVICE_ACCOUNT
-const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT;
 const QUOTA_LIMIT = 5; // 定義每個金鑰的使用次數上限
 
 // 這裡我們將預設文章陣列清空，讓 API 從一個沒有資料的狀態開始
 let posts = [];
 
 // 初始化 Firebase Admin SDK
-// 確保只初始化一次
-if (!initializeApp.length) {
-  initializeApp({
-    credential: credential.cert(serviceAccount)
-  });
+// 確保只初始化一次，避免因為重複初始化而產生的錯誤
+if (!getApps().length) {
+  try {
+    // 檢查服務帳戶是否已設定
+    if (!serviceAccount) {
+      throw new Error('FIREBASE_SERVICE_ACCOUNT environment variable is not set.');
+    }
+    initializeApp({
+      credential: credential.cert(JSON.parse(serviceAccount))
+    });
+  } catch (error) {
+    console.error("Firebase Admin SDK 初始化失敗:", error);
+    // 這裡我們不拋出錯誤，讓程式繼續執行，因為有些情況下這個模組可能不需要初始化
+  }
 }
 
 const db = getFirestore();
@@ -41,7 +48,7 @@ export default async function handler(req, res) {
     let keyData;
 
     try {
-      // 在 Firestore 中尋找符合 API 金鑰的文檔 (現在從公開資料夾尋找)
+      // 在 Firestore 中尋找符合 API 金鑰的文檔
       // 注意：db.collectionGroup('api_keys') 會在所有名為 'api_keys' 的資料夾中尋找
       const keySnapshot = await db.collectionGroup('api_keys').where('key', '==', apiKey).limit(1).get();
       
@@ -58,7 +65,7 @@ export default async function handler(req, res) {
       }
       
       // 使用事務（Transaction）來安全地增加使用次數
-      await runTransaction(db, async (transaction) => {
+      await db.runTransaction(async (transaction) => {
         const docSnap = await transaction.get(keyDocRef);
         if (!docSnap.exists) {
           throw new Error("文檔不存在");
