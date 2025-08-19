@@ -1,0 +1,15 @@
+{
+  "name": "your-vercel-project",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^11.6.0"
+    // 如果你還有其他依賴，它們會在這裡
+  },
+  "author": "",
+  "license": "ISC"
+}
