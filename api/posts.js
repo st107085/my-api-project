@@ -6,9 +6,6 @@ import { credential } from "firebase-admin";
 const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT;
 const QUOTA_LIMIT = 5; // 定義每個金鑰的使用次數上限
 
-// 這裡我們將預設文章陣列清空，讓 API 從一個沒有資料的狀態開始
-let posts = [];
-
 // 初始化 Firebase Admin SDK
 // 確保只初始化一次，避免因為重複初始化而產生的錯誤
 if (!getApps().length) {
@@ -83,8 +80,18 @@ export default async function handler(req, res) {
 
   // 檢查請求的方法
   if (req.method === 'GET') {
-    // 如果是 GET 請求，回傳所有文章資料
+    // 如果是 GET 請求，從 Firestore 讀取所有文章
+    const postsRef = db.collection('posts');
+    const snapshot = await postsRef.get();
+    
+    // 將 Firestore 查詢結果轉換成 JSON 陣列
+    const posts = snapshot.docs.map(doc => ({
+      id: doc.id, // 使用 Firestore 的文檔 ID 作為文章 ID
+      ...doc.data() // 展開文檔中的所有欄位
+    }));
+
     res.status(200).json(posts);
+
   } else if (req.method === 'POST') {
     // 如果是 POST 請求，從請求主體中取得所有需要的欄位
     const { 
@@ -101,25 +108,29 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: '需要提供文章標題' });
     }
     
-    // 產生一個新的獨一無二的 id
-    const newId = posts.length > 0 ? Math.max(...posts.map(post => post.id)) + 1 : 1;
-    
-    // 建立一個新的文章物件
+    // 建立一個新的文章物件，時間戳記會自動產生
     const newPost = {
-      id: newId,
       title: title,
       acceleration_x: acceleration_x || null,
       acceleration_y: acceleration_y || null,
       acceleration_z: acceleration_z || null,
       latitude: latitude || null,
-      longitude: longitude || null
+      longitude: longitude || null,
+      createdAt: FieldValue.serverTimestamp() // 使用 Firestore 的伺服器時間戳記
     };
     
-    // 將新文章加入到我們的資料陣列中
-    posts.push(newPost);
+    try {
+        // 將新文章加入到 'posts' 集合中
+        // add() 方法會自動為你生成一個獨一無二的 ID
+        const docRef = await db.collection('posts').add(newPost);
+        
+        // 回傳新文章的資訊，包含 Firestore 自動生成的 ID
+        res.status(201).json({ id: docRef.id, ...newPost });
+    } catch (error) {
+        console.error("將文章寫入 Firestore 失敗:", error);
+        return res.status(500).json({ error: '內部伺服器錯誤，無法儲存文章' });
+    }
     
-    // 回傳新文章的資訊
-    res.status(201).json(newPost);
   } else {
     // 如果是其他不支援的方法，回傳 405 Method Not Allowed
     res.setHeader('Allow', ['GET', 'POST']);
